@@ -1,7 +1,6 @@
 const MSG_REQ = 'CORS_PROXY_FETCH';
 const MSG_RES = 'CORS_PROXY_RESPONSE';
 
-// Bridge: page -> content script -> background -> content script -> page
 window.addEventListener('message', (event) => {
   if (event.source !== window || event.data?.type !== MSG_REQ) return;
   const { id, url, timeout } = event.data;
@@ -9,14 +8,13 @@ window.addEventListener('message', (event) => {
 
   chrome.runtime.sendMessage({ type: 'PROXY_FETCH', id, url, timeout }, (response) => {
     if (chrome.runtime.lastError) {
-      window.postMessage({ type: MSG_RES, id, error: chrome.runtime.lastError.message }, window.location.origin);
+      window.postMessage({ type: MSG_RES, id, error: chrome.runtime.lastError.message }, '*');
       return;
     }
-    window.postMessage({ type: MSG_RES, id, ...response }, window.location.origin);
+    window.postMessage({ type: MSG_RES, id, ...response }, '*');
   });
 });
 
-// Inject into the PAGE context so the scanner can call window.__corsProxyFetch
 const script = document.createElement('script');
 script.textContent = `(function() {
   var MSG_REQ = 'CORS_PROXY_FETCH';
@@ -52,17 +50,11 @@ script.textContent = `(function() {
         resolve(buildResponse(e.data));
       }
       window.addEventListener('message', handler);
-      window.postMessage({ type: MSG_REQ, id: id, url: url, timeout: timeout }, window.location.origin);
+      window.postMessage({ type: MSG_REQ, id: id, url: url, timeout: timeout }, '*');
     });
   }
 
-  if (!window.__corsProxyFetch) {
-    Object.defineProperty(window, '__corsProxyFetch', {
-      value: corsProxyFetch,
-      writable: false,
-      configurable: false
-    });
-  }
+  if (!window.__corsProxyFetch) Object.defineProperty(window, '__corsProxyFetch', { value: corsProxyFetch, configurable: true });
 })();`;
 (document.head || document.documentElement).appendChild(script);
 script.remove();
